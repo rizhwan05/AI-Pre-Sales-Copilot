@@ -1,28 +1,27 @@
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 from typing import Optional, Tuple
 
-from llama_index.embeddings.bedrock import BedrockEmbedding
+from llama_index.llms.bedrock import Bedrock
 
-BEDROCK_EMBED_MODEL_ID = "amazon.titan-embed-text-v2:0"
+DEFAULT_LLM_MODEL_ID = "anthropic.claude-opus-4-6"
 
 
-@lru_cache(maxsize=1)
-def get_embedding_model() -> BedrockEmbedding:
-	# FIX 3: Centralize and reuse the embedding model instance.
+def get_llm() -> Bedrock:
+	# FIX 6: Central Claude Opus 4.6 initialization for future orchestration.
 	try:
 		access_key, secret_key, session_token, region = _get_aws_config()
-		return BedrockEmbedding(
-			model_id=BEDROCK_EMBED_MODEL_ID,
+		model_id = os.getenv("BEDROCK_LLM_MODEL_ID", DEFAULT_LLM_MODEL_ID)
+		return Bedrock(
+			model=model_id,
 			region_name=region,
 			aws_access_key_id=access_key,
 			aws_secret_access_key=secret_key,
 			aws_session_token=session_token,
 		)
 	except Exception as exc:
-		raise RuntimeError("Failed to initialize Bedrock embedding model") from exc
+		raise RuntimeError("Failed to initialize Bedrock LLM") from exc
 
 
 def _get_aws_config() -> Tuple[str, str, Optional[str], str]:
