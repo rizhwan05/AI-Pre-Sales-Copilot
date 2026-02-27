@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from llama_index.core import QueryBundle, VectorStoreIndex
+from llama_index.core.vector_stores import ExactMatchFilter, MetadataFilters
 
 from app.ai.embedding_client import get_embedding_model
 from app.db.chroma_client import get_vector_store
@@ -16,7 +17,10 @@ class VectorStoreEmptyError(RuntimeError):
 	"""Raised when the vector store has no indexed documents."""
 
 
-def retrieve_similar_projects(rfp_summary: str) -> List[Dict[str, object]]:
+def retrieve_similar_projects(
+	rfp_summary: str,
+	document_type: Optional[str] = None,
+) -> List[Dict[str, object]]:
 	if not rfp_summary or not rfp_summary.strip():
 		return []
 
@@ -30,7 +34,21 @@ def retrieve_similar_projects(rfp_summary: str) -> List[Dict[str, object]]:
 				"Vector store is empty. Ingest documents before querying."
 			)
 		index = VectorStoreIndex.from_vector_store(vector_store)
-		retriever = index.as_retriever(similarity_top_k=TOP_K)
+		if document_type:
+			filters = MetadataFilters(
+				filters=[
+					ExactMatchFilter(
+						key="document_type",
+						value=document_type,
+					)
+				]
+			)
+			retriever = index.as_retriever(
+				similarity_top_k=TOP_K,
+				filters=filters,
+			)
+		else:
+			retriever = index.as_retriever(similarity_top_k=TOP_K)
 
 		query_embedding = embed_model.get_query_embedding(rfp_summary)
 		query_bundle = QueryBundle(query_str=rfp_summary, embedding=query_embedding)

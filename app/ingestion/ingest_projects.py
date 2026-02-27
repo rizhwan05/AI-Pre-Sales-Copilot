@@ -15,7 +15,8 @@ from app.utils.chunking import semantic_chunk_documents
 
 PERSIST_DIR = "./chroma_store"
 DATA_DIR = "./data/past_projects"
-_METADATA_KEYS = ("project_name", "tech_stack", "duration", "team_size")
+_METADATA_KEYS = ("project_name", "tech_stack", "duration", "team_size", "document_type")
+ALLOWED_DOCUMENT_TYPES = {"proposal", "case_study", "estimation", "architecture"}
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +65,14 @@ def ingest_project_text(project_text: str, metadata: Dict[str, object]) -> int:
 
 	# FIX 8: Router-friendly ingestion without file system dependency.
 	metadata = dict(metadata or {})
+	document_type = metadata.get("document_type")
+	if not isinstance(document_type, str) or not document_type.strip():
+		raise ValueError("document_type is required")
 	metadata.setdefault("project_name", "Unknown")
 	metadata.setdefault("tech_stack", "Unknown")
 	metadata.setdefault("duration", "Unknown")
 	metadata.setdefault("team_size", "Unknown")
+	metadata["document_type"] = metadata.get("document_type", "general")
 
 	doc_id = _build_text_document_id(project_text, metadata)
 	document = Document(text=project_text, metadata=metadata, id_=doc_id)
@@ -110,6 +115,11 @@ def load_documents(data_dir: str) -> List[Document]:
 def _build_metadata_from_path(file_path: str) -> Dict[str, object]:
 	# FIX 2: Preserve file_path and file_name for deterministic IDs.
 	metadata = _extract_metadata_from_filename(file_path)
+	document_type = metadata.get("document_type")
+	if document_type not in ALLOWED_DOCUMENT_TYPES:
+		raise ValueError(
+			f"document_type is required and must be one of: {sorted(ALLOWED_DOCUMENT_TYPES)}"
+		)
 	metadata["file_path"] = file_path
 	metadata["file_name"] = os.path.basename(file_path)
 	return {key: value for key, value in metadata.items() if value}
@@ -159,7 +169,8 @@ def _get_vector_store_count(vector_store) -> int:
 def _sanitize_document_metadata(document: Document) -> Document:
 	metadata = dict(getattr(document, "metadata", {}) or {})
 	for key in _METADATA_KEYS:
-		metadata.setdefault(key, "Unknown")
+		if key != "document_type":
+			metadata.setdefault(key, "Unknown")
 
 	sanitized: Dict[str, object] = {}
 	for key, value in metadata.items():
