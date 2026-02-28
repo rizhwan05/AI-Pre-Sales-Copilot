@@ -27,6 +27,17 @@ def generate_proposal(
 	system_prompt, user_prompt = get_proposal_prompt(structured_requirements, context)
 	response = client.generate(system_prompt=system_prompt, user_prompt=user_prompt)
 	parsed = _safe_parse_json(response)
+	if parsed is not None:
+		return parsed
+
+	logger.warning("Invalid JSON from model, retrying with correction prompt")
+	correction_prompt = (
+		"Your previous output was invalid JSON. "
+		"Return ONLY valid JSON matching the required schema. "
+		"Do NOT include any text before or after JSON."
+	)
+	response = client.generate(system_prompt=system_prompt, user_prompt=correction_prompt)
+	parsed = _safe_parse_json(response)
 	if parsed is None:
 		raise ValueError("LLM returned invalid JSON")
 	return parsed
@@ -70,8 +81,11 @@ def _format_retrieved_context(retrieved: List[Dict[str, object]]) -> str:
 
 
 def _safe_parse_json(text: str) -> Dict[str, object] | None:
+	cleaned = _strip_json_fences(text)
+	if cleaned is None:
+		return None
 	try:
-		return json.loads(text)
+		return json.loads(cleaned)
 	except json.JSONDecodeError:
 		return None
 
@@ -81,3 +95,18 @@ def _truncate_context(context: str, max_chars: int) -> str:
 		return context
 	logger.warning("Truncated retrieved context from %s to %s characters", len(context), max_chars)
 	return context[:max_chars].rstrip()
+
+
+def _strip_json_fences(text: str) -> str | None:
+	if not text:
+		return None
+	stripped = text.strip()
+	if stripped.startswith("```"):
+		stripped = stripped.strip("`")
+		stripped = stripped.replace("json", "", 1).strip()
+
+	start = stripped.find("{")
+	end = stripped.rfind("}")
+	if start == -1 or end == -1 or end <= start:
+		return None
+	return stripped[start : end + 1]

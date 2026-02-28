@@ -36,7 +36,7 @@ def retrieve_similar_projects(
 			raise VectorStoreEmptyError(
 				"Vector store is empty. Ingest documents before querying."
 			)
-		index = VectorStoreIndex.from_vector_store(vector_store)
+		index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
 		if document_type:
 			filters = MetadataFilters(
 				filters=[
