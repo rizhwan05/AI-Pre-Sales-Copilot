@@ -15,8 +15,10 @@ from llama_index.core.utils import get_tokenizer
 
 logger = logging.getLogger(__name__)
 
-SOW_TOP_K = 18
+SOW_TOP_K = 12
 MAX_CONTEXT_CHARS = 12000
+SECTION_CONTEXT_CHARS = 8000
+MAX_SECTIONS = 10
 
 
 def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Dict[str, object]:
@@ -56,7 +58,10 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 		f"CONTEXT_STATUS: {'none' if not retrieved else 'available'}\n"
 		"CONTEXT_CONFLICTS: prefer RFP requirements if conflicts are detected\n"
 	)
-	index_response = client.generate(system_prompt=index_prompt, user_prompt=index_user)
+	try:
+		index_response = client.generate(system_prompt=index_prompt, user_prompt=index_user)
+	except RuntimeError as exc:
+		raise RuntimeError("SOW index generation failed") from exc
 	llm_calls += 1
 	index_duration_ms = int((time.perf_counter() - index_start) * 1000)
 	index_data = _safe_parse_json(index_response) or {}
@@ -73,6 +78,9 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 		sections = _default_sections()
 	if not isinstance(activities, list):
 		activities = []
+	if len(sections) > MAX_SECTIONS:
+		logger.info("SOW sections truncated: original=%s capped=%s", len(sections), MAX_SECTIONS)
+		sections = sections[:MAX_SECTIONS]
 
 	merged = _empty_sow_document()
 	sections_generated = 0
@@ -80,9 +88,10 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 	for section_name in sections:
 		section_start = time.perf_counter()
 		logger.info("SOW_SECTION_START: section_name=%s timestamp=%s", section_name, time.time())
+		section_context = _truncate_context(context, SECTION_CONTEXT_CHARS)
 		section_prompt, section_user = get_sow_section_prompt(
 			structured_requirements,
-			context,
+			section_context,
 			section_name=str(section_name),
 			activities=activities,
 		)
@@ -91,12 +100,36 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 			f"CONTEXT_STATUS: {'none' if not retrieved else 'available'}\n"
 			"CONTEXT_CONFLICTS: prefer RFP requirements if conflicts are detected\n"
 		)
-		section_response = client.generate(system_prompt=section_prompt, user_prompt=section_user)
+		section_retry_count = 0
+		section_call_start = time.perf_counter()
+		try:
+			section_response = client.generate(system_prompt=section_prompt, user_prompt=section_user)
+		except RuntimeError as exc:
+			raise RuntimeError("SOW section generation failed") from exc
+		section_call_duration_ms = int((time.perf_counter() - section_call_start) * 1000)
+		logger.info(
+			"SOW_SECTION_CALL: section_name=%s duration_ms=%s retry_count=%s",
+			section_name,
+			section_call_duration_ms,
+			section_retry_count,
+		)
 		llm_calls += 1
 		section_payload = _safe_parse_json(section_response)
 		if section_payload is None:
 			logger.warning("Invalid JSON for SOW section %s, retrying once", section_name)
-			section_response = client.generate(system_prompt=section_prompt, user_prompt=section_user)
+			section_retry_count = 1
+			section_call_start = time.perf_counter()
+			try:
+				section_response = client.generate(system_prompt=section_prompt, user_prompt=section_user)
+			except RuntimeError as exc:
+				raise RuntimeError("SOW section generation failed") from exc
+			section_call_duration_ms = int((time.perf_counter() - section_call_start) * 1000)
+			logger.info(
+				"SOW_SECTION_CALL: section_name=%s duration_ms=%s retry_count=%s",
+				section_name,
+				section_call_duration_ms,
+				section_retry_count,
+			)
 			llm_calls += 1
 			total_retries += 1
 			section_payload = _safe_parse_json(section_response)
@@ -107,7 +140,7 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 				"SOW_SECTION_END: section_name=%s duration_ms=%s retry_count=%s output_char_length=%s success_or_skipped=%s",
 				section_name,
 				section_duration_ms,
-				1,
+				section_retry_count,
 				len(section_response) if section_response else 0,
 				"skipped",
 			)
@@ -119,7 +152,7 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 			"SOW_SECTION_END: section_name=%s duration_ms=%s retry_count=%s output_char_length=%s success_or_skipped=%s",
 			section_name,
 			section_duration_ms,
-			0,
+			section_retry_count,
 			len(section_response) if section_response else 0,
 			"success",
 		)
@@ -179,7 +212,17 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 		f"{correction_user}\n\n"
 		"Your previous response did not match schema. You MUST follow the schema exactly."
 	)
-	correction_response = client.generate(system_prompt=correction_system, user_prompt=correction_user)
+	correction_call_start = time.perf_counter()
+	try:
+		correction_response = client.generate(system_prompt=correction_system, user_prompt=correction_user)
+	except RuntimeError as exc:
+		raise RuntimeError("SOW correction generation failed") from exc
+	correction_call_duration_ms = int((time.perf_counter() - correction_call_start) * 1000)
+	logger.info(
+		"SOW_CORRECTION_CALL: duration_ms=%s retry_count=%s",
+		correction_call_duration_ms,
+		1,
+	)
 	llm_calls += 1
 	total_retries += 1
 	validated = _validate_sow_json(correction_response)
