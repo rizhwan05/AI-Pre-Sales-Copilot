@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List
+from typing import Dict
 
-from app.services.estimation_service import estimate_effort
+from app.services.estimation_service import generate_estimation
 from app.services.extraction_service import extract_requirements
 from app.services.proposal_service import generate_proposal
-from app.services.retrieval_service import retrieve_similar_projects
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +16,36 @@ def run_full_presales_pipeline(rfp_text: str) -> Dict[str, object]:
 		raise ValueError("rfp_text must be a non-empty string")
 
 	requirements = extract_requirements(rfp_text)
-	similar_projects = retrieve_similar_projects(rfp_text)
-	proposal = generate_proposal(rfp_text, requirements, similar_projects)
-	effort_estimate = estimate_effort(rfp_text, requirements, proposal)
+	proposal = generate_proposal(requirements)
+	effort_estimate = generate_estimation(requirements)
 
 	logger.info("Presales pipeline completed.")
 	return {
 		"requirements": requirements,
-		"similar_projects": similar_projects,
 		"proposal": proposal,
 		"effort_estimate": effort_estimate,
 	}
+
+
+def handle_followup(structured_requirements: Dict[str, object], user_intent: str) -> Dict[str, object]:
+	if not structured_requirements:
+		raise ValueError("structured_requirements must be provided")
+	if not user_intent or not user_intent.strip():
+		raise ValueError("user_intent must be a non-empty string")
+
+	intent = user_intent.strip().lower()
+	intent_map = {
+		"proposal": "proposal",
+		"estimation": "estimation",
+		"case study": "case_study",
+		"architecture": "architecture",
+	}
+	if intent not in intent_map:
+		raise ValueError("Unsupported user_intent")
+
+	if intent == "proposal":
+		return generate_proposal(structured_requirements, document_type=intent_map[intent])
+	if intent == "estimation":
+		return generate_estimation(structured_requirements)
+
+	return generate_proposal(structured_requirements, document_type=intent_map[intent])

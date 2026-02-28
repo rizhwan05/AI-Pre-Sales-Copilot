@@ -1,22 +1,14 @@
-from __future__ import annotations
-
-import logging
-
 from fastapi import FastAPI
 
-from app.startup_validation import validate_startup
+from app.routers.ingestion_router import ingest_router
+from app.routers.rfp_router import rfp_router
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
-logger = logging.getLogger(__name__)
+app = FastAPI(title="AI Pre-Sales Copilot")
 
-app = FastAPI()
+app.include_router(ingest_router, prefix="/api/v1")
+app.include_router(rfp_router, prefix="/api/v1")
 
+if __name__ == "__main__":
+	import uvicorn
 
-@app.on_event("startup")
-def _validate_startup() -> None:
-	try:
-		validate_startup()
-		logger.info("Startup validation succeeded.")
-	except Exception as exc:
-		logger.exception("Startup validation failed.")
-		raise RuntimeError("Startup validation failed.") from exc
+	uvicorn.run("app.main:app", host="127.0.0.1", port=8080, reload=True)
