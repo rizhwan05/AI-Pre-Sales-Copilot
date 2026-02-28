@@ -23,10 +23,11 @@ def generate_estimation(
 	context = _format_retrieved_context(retrieved)
 	context = _truncate_context(context, 6000)
 	logger.info(
-		"Estimation LLM context: chunks=%s chars=%s empty=%s",
+		"Estimation LLM context: chunks=%s chars=%s empty=%s generation_mode=%s",
 		len(retrieved),
 		len(context),
 		not context.strip(),
+		"estimation",
 	)
 	if not context.strip():
 		logger.warning("LLM answering from RFP structured summary only")

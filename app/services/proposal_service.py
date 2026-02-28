@@ -23,10 +23,11 @@ def generate_proposal(
 	context = _format_retrieved_context(retrieved)
 	context = _truncate_context(context, 6000)
 	logger.info(
-		"Proposal LLM context: chunks=%s chars=%s empty=%s",
+		"Proposal LLM context: chunks=%s chars=%s empty=%s generation_mode=%s",
 		len(retrieved),
 		len(context),
 		not context.strip(),
+		"proposal",
 	)
 	if not context.strip():
 		logger.warning("LLM answering from RFP structured summary only")

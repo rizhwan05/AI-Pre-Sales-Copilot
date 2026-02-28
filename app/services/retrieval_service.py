@@ -43,7 +43,9 @@ def retrieve_similar_projects(
 				"Vector store is empty. Ingest documents before querying."
 			)
 		index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
+		retrieval_mode = "semantic"
 		if document_type:
+			retrieval_mode = "strict"
 			logger.info("Strict filtered retrieval for document_type=%s", document_type)
 			filters = MetadataFilters(
 				filters=[
@@ -65,7 +67,8 @@ def retrieve_similar_projects(
 		query_bundle = QueryBundle(query_str=rfp_summary, embedding=query_embedding)
 		results = retriever.retrieve(query_bundle)
 		logger.info(
-			"Filtered retrieval results: chunks=%s types=%s",
+			"Retrieval results: mode=%s total_chunks=%s types=%s",
+			retrieval_mode,
 			len(results),
 			_sorted_document_types(results),
 		)
@@ -75,7 +78,8 @@ def retrieve_similar_projects(
 			retriever = index.as_retriever(similarity_top_k=TOP_K)
 			results = retriever.retrieve(query_bundle)
 			logger.info(
-				"Fallback retrieval results: chunks=%s types=%s",
+				"Retrieval results: mode=%s total_chunks=%s types=%s",
+				"fallback",
 				len(results),
 				_sorted_document_types(results),
 			)
