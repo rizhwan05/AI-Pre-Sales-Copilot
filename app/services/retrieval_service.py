@@ -23,6 +23,7 @@ class VectorStoreEmptyError(RuntimeError):
 def retrieve_similar_projects(
 	rfp_summary: str,
 	document_type: Optional[str] = None,
+	top_k: Optional[int] = None,
 ) -> List[Dict[str, object]]:
 	if not rfp_summary or not rfp_summary.strip():
 		raise ValueError("Query cannot be empty")
@@ -30,11 +31,13 @@ def retrieve_similar_projects(
 	try:
 		# FIX 3: Centralized embedding initialization.
 		embed_model = get_embedding_model()
+		effective_top_k = top_k or TOP_K
 
 		logger.info(
-			"Retrieval request: query_len=%s document_type=%s",
+			"Retrieval request: query_len=%s document_type=%s top_k=%s",
 			len(rfp_summary),
 			document_type,
+			effective_top_k,
 		)
 
 		vector_store = get_vector_store()
@@ -56,12 +59,12 @@ def retrieve_similar_projects(
 				]
 			)
 			retriever = index.as_retriever(
-				similarity_top_k=TOP_K,
+				similarity_top_k=effective_top_k,
 				filters=filters,
 			)
 		else:
 			logger.info("Semantic-only retrieval (no document_type filter)")
-			retriever = index.as_retriever(similarity_top_k=TOP_K)
+			retriever = index.as_retriever(similarity_top_k=effective_top_k)
 
 		query_embedding = embed_model.get_query_embedding(rfp_summary)
 		query_bundle = QueryBundle(query_str=rfp_summary, embedding=query_embedding)
@@ -75,7 +78,7 @@ def retrieve_similar_projects(
 		if not results and document_type:
 			logger.warning("No results for document_type=%s; retrying without filter", document_type)
 			logger.info("Fallback to semantic-only retrieval")
-			retriever = index.as_retriever(similarity_top_k=TOP_K)
+			retriever = index.as_retriever(similarity_top_k=effective_top_k)
 			results = retriever.retrieve(query_bundle)
 			logger.info(
 				"Retrieval results: mode=%s total_chunks=%s types=%s",
