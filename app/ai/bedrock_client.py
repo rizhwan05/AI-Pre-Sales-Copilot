@@ -29,7 +29,7 @@ class BedrockClient:
 		system_prompt: str,
 		user_prompt: str,
 		temperature: float = 0.2,
-		max_tokens: int = 4000,
+		max_tokens: int = 2000,
 	) -> str:
 		if not user_prompt or not user_prompt.strip():
 			raise ValueError("user_prompt must be a non-empty string")

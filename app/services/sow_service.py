@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 SOW_TOP_K = 12
 MAX_CONTEXT_CHARS = 12000
 SECTION_CONTEXT_CHARS = 8000
-MAX_SECTIONS = 10
+MAX_SECTIONS = 3
 
 
 def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Dict[str, object]:

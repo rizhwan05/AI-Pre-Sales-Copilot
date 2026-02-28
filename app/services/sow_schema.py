@@ -134,3 +134,22 @@ class Document(BaseModel):
 class SOWSchema(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 	document: Document
+
+
+ExecutiveSummary.model_rebuild()
+Confidentiality.model_rebuild()
+BusinessValue.model_rebuild()
+Definitions.model_rebuild()
+ProjectResumptionCharge.model_rebuild()
+ScopeOfServices.model_rebuild()
+ServiceDelivery.model_rebuild()
+RoleProfile.model_rebuild()
+ResourceProfiles.model_rebuild()
+InvoicingItem.model_rebuild()
+Fees.model_rebuild()
+Expenses.model_rebuild()
+ChangeManagement.model_rebuild()
+SignatureBlock.model_rebuild()
+AcceptanceApprovals.model_rebuild()
+Document.model_rebuild()
+SOWSchema.model_rebuild()
