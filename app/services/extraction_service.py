@@ -62,21 +62,48 @@ def _split_into_sections(text: str) -> List[Tuple[str, str]]:
 
 
 def _invoke_with_retry(client: BedrockClient, system_prompt: str, user_prompt: str) -> Dict[str, object]:
-	for attempt in range(2):
-		response = client.generate(system_prompt=system_prompt, user_prompt=user_prompt)
-		parsed = _safe_parse_json(response)
-		if parsed is not None:
-			return parsed
-		logger.warning("Invalid JSON from model, retrying (attempt %s)", attempt + 1)
+	response = client.generate(system_prompt=system_prompt, user_prompt=user_prompt)
+	parsed = _safe_parse_json(response)
+	if parsed is not None:
+		return parsed
 
-	raise RuntimeError("Model returned invalid JSON after retry")
+	logger.warning("Invalid JSON from model, retrying with correction prompt")
+	correction_prompt = (
+		"Your previous output was invalid JSON. "
+		"Return ONLY valid JSON matching the required schema. "
+		"Do NOT include any text before or after JSON."
+	)
+	response = client.generate(system_prompt=system_prompt, user_prompt=correction_prompt)
+	parsed = _safe_parse_json(response)
+	if parsed is not None:
+		return parsed
+
+	raise ValueError("LLM returned invalid JSON after retry")
 
 
 def _safe_parse_json(text: str) -> Dict[str, object] | None:
+	cleaned = _strip_json_fences(text)
+	if cleaned is None:
+		return None
 	try:
-		return json.loads(text)
+		return json.loads(cleaned)
 	except json.JSONDecodeError:
 		return None
+
+
+def _strip_json_fences(text: str) -> str | None:
+	if not text:
+		return None
+	stripped = text.strip()
+	if stripped.startswith("```"):
+		stripped = stripped.strip("`")
+		stripped = stripped.replace("json", "", 1).strip()
+
+	start = stripped.find("{")
+	end = stripped.rfind("}")
+	if start == -1 or end == -1 or end <= start:
+		return None
+	return stripped[start : end + 1]
 
 
 def _init_requirements() -> Dict[str, object]:
