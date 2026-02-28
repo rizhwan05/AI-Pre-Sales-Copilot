@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, List, Optional
 
 from llama_index.core import QueryBundle, VectorStoreIndex
@@ -11,6 +12,8 @@ from app.ai.embedding_client import get_embedding_model
 from app.db.chroma_client import get_vector_store
 
 TOP_K = 5
+
+logger = logging.getLogger(__name__)
 
 
 class VectorStoreEmptyError(RuntimeError):
@@ -22,7 +25,7 @@ def retrieve_similar_projects(
 	document_type: Optional[str] = None,
 ) -> List[Dict[str, object]]:
 	if not rfp_summary or not rfp_summary.strip():
-		return []
+		raise ValueError("Query cannot be empty")
 
 	try:
 		# FIX 3: Centralized embedding initialization.
@@ -53,12 +56,18 @@ def retrieve_similar_projects(
 		query_embedding = embed_model.get_query_embedding(rfp_summary)
 		query_bundle = QueryBundle(query_str=rfp_summary, embedding=query_embedding)
 		results = retriever.retrieve(query_bundle)
+		if not results and document_type:
+			logger.warning("No results for document_type=%s; retrying without filter", document_type)
+			retriever = index.as_retriever(similarity_top_k=TOP_K)
+			results = retriever.retrieve(query_bundle)
 		if not results:
-			return [_empty_response()]
+			return []
 
 		return _format_results(results)
+	except (VectorStoreEmptyError, ValueError):
+		raise
 	except Exception as exc:
-		raise RuntimeError("Failed to retrieve similar projects") from exc
+		raise RuntimeError(f"Failed to retrieve similar projects: {exc}") from exc
 
 
 def _format_results(results) -> List[Dict[str, object]]:
