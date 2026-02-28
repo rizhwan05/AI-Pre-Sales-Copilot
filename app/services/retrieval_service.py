@@ -31,6 +31,12 @@ def retrieve_similar_projects(
 		# FIX 3: Centralized embedding initialization.
 		embed_model = get_embedding_model()
 
+		logger.info(
+			"Retrieval request: query_len=%s document_type=%s",
+			len(rfp_summary),
+			document_type,
+		)
+
 		vector_store = get_vector_store()
 		if _get_vector_store_count(vector_store) == 0:
 			raise VectorStoreEmptyError(
@@ -38,6 +44,7 @@ def retrieve_similar_projects(
 			)
 		index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
 		if document_type:
+			logger.info("Strict filtered retrieval for document_type=%s", document_type)
 			filters = MetadataFilters(
 				filters=[
 					ExactMatchFilter(
@@ -51,15 +58,27 @@ def retrieve_similar_projects(
 				filters=filters,
 			)
 		else:
+			logger.info("Semantic-only retrieval (no document_type filter)")
 			retriever = index.as_retriever(similarity_top_k=TOP_K)
 
 		query_embedding = embed_model.get_query_embedding(rfp_summary)
 		query_bundle = QueryBundle(query_str=rfp_summary, embedding=query_embedding)
 		results = retriever.retrieve(query_bundle)
+		logger.info(
+			"Filtered retrieval results: chunks=%s types=%s",
+			len(results),
+			_sorted_document_types(results),
+		)
 		if not results and document_type:
 			logger.warning("No results for document_type=%s; retrying without filter", document_type)
+			logger.info("Fallback to semantic-only retrieval")
 			retriever = index.as_retriever(similarity_top_k=TOP_K)
 			results = retriever.retrieve(query_bundle)
+			logger.info(
+				"Fallback retrieval results: chunks=%s types=%s",
+				len(results),
+				_sorted_document_types(results),
+			)
 		if not results:
 			return []
 
@@ -143,6 +162,17 @@ def _get_vector_store_count(vector_store) -> int:
 	if hasattr(vector_store, "count"):
 		return int(vector_store.count())
 	return 0
+
+
+def _sorted_document_types(results) -> List[str]:
+	types = set()
+	for item in results:
+		node = getattr(item, "node", None)
+		metadata = getattr(node, "metadata", {}) if node else {}
+		doc_type = metadata.get("document_type")
+		if doc_type:
+			types.add(str(doc_type))
+	return sorted(types)
 
 
 def _empty_response() -> Dict[str, object]:

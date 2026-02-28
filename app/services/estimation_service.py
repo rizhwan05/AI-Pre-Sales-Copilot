@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from app.ai.bedrock_client import BedrockClient
 from app.ai.prompts import get_estimation_prompt
@@ -11,14 +11,25 @@ from app.services.retrieval_service import retrieve_similar_projects
 logger = logging.getLogger(__name__)
 
 
-def generate_estimation(structured_requirements: Dict[str, object]) -> Dict[str, object]:
+def generate_estimation(
+	structured_requirements: Dict[str, object],
+	document_type: Optional[str] = None,
+) -> Dict[str, object]:
 	if not structured_requirements:
 		raise ValueError("structured_requirements must be provided")
 
 	query_text = _summarize_requirements(structured_requirements)
-	retrieved = retrieve_similar_projects(query_text, document_type="estimation")
+	retrieved = retrieve_similar_projects(query_text, document_type=document_type)
 	context = _format_retrieved_context(retrieved)
 	context = _truncate_context(context, 6000)
+	logger.info(
+		"Estimation LLM context: chunks=%s chars=%s empty=%s",
+		len(retrieved),
+		len(context),
+		not context.strip(),
+	)
+	if not context.strip():
+		logger.warning("LLM answering from RFP structured summary only")
 
 	client = BedrockClient()
 	system_prompt, user_prompt = get_estimation_prompt(structured_requirements, context)
