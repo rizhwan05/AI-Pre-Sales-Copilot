@@ -80,6 +80,12 @@ async def follow_up(payload: dict):
 			result = generate_estimation(requirements, document_type=document_type)
 			return {"output": result}
 		if generation_intent == "statement_of_work":
+			logger.info(
+				"SOW_TRIGGER: session_id=%s generation_mode=%s timestamp=%s",
+				session_id,
+				"statement_of_work",
+				time.time(),
+			)
 			result = generate_statement_of_work(requirements)
 			return {"output": result}
 
