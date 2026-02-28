@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from typing import Optional, Tuple
+from typing import Tuple
 
 from app.ai.embedding_client import get_embedding_model
 from app.db.chroma_client import PERSIST_DIR
@@ -12,8 +12,8 @@ def validate_startup() -> None:
 	_errors = []
 
 	try:
-		_get_aws_config()
-	except ValueError as exc:
+		_get_bedrock_bearer_token()
+	except RuntimeError as exc:
 		_errors.append(str(exc))
 
 	try:
@@ -30,18 +30,11 @@ def validate_startup() -> None:
 		raise RuntimeError("Startup validation failed: " + "; ".join(_errors))
 
 
-def _get_aws_config() -> Tuple[str, str, Optional[str], str]:
-	access_key = os.getenv("AWS_ACCESS_KEY_ID")
-	secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-	session_token = os.getenv("AWS_SESSION_TOKEN")
-	region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-
-	if not region:
-		raise ValueError("AWS region must be set via AWS_REGION or AWS_DEFAULT_REGION")
-	if not access_key or not secret_key:
-		raise ValueError("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set")
-
-	return access_key, secret_key, session_token, region
+def _get_bedrock_bearer_token() -> Tuple[str]:
+	bearer_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+	if not bearer_token:
+		raise RuntimeError("AWS_BEARER_TOKEN_BEDROCK not configured")
+	return (bearer_token,)
 
 
 def _ensure_chroma_writable(persist_dir: str) -> None:

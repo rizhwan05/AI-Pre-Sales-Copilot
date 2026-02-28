@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-from typing import Optional, Tuple
+from typing import Optional
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -16,18 +15,12 @@ DEFAULT_MODEL_ID = "anthropic.claude-opus-4-6"
 class BedrockClient:
 	def __init__(self, model_id: str = DEFAULT_MODEL_ID, region: Optional[str] = None) -> None:
 		self._model_id = model_id
-		self._region = region or os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-		access_key, secret_key, session_token = _get_aws_credentials()
-		if not self._region:
-			raise ValueError("AWS region must be set via AWS_REGION or AWS_DEFAULT_REGION")
-
+		self._region = region or "us-east-1"
 		self._client = boto3.client(
-			"bedrock-runtime",
+			service_name="bedrock-runtime",
 			region_name=self._region,
-			aws_access_key_id=access_key,
-			aws_secret_access_key=secret_key,
-			aws_session_token=session_token,
 		)
+		logger.info("Bedrock client initialized using bearer token authentication")
 
 	def generate(
 		self,
@@ -72,16 +65,6 @@ class BedrockClient:
 		except (ValueError, KeyError, TypeError) as exc:
 			logger.exception("Unexpected Bedrock response format")
 			raise RuntimeError("Unexpected Bedrock response format") from exc
-
-
-def _get_aws_credentials() -> Tuple[str, str, Optional[str]]:
-	access_key = os.getenv("AWS_ACCESS_KEY_ID")
-	secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-	session_token = os.getenv("AWS_SESSION_TOKEN")
-
-	if not access_key or not secret_key:
-		raise ValueError("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set")
-	return access_key, secret_key, session_token
 
 
 def _extract_text(payload: dict) -> str:

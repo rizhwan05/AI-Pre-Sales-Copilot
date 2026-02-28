@@ -1,39 +1,23 @@
 from __future__ import annotations
 
-import os
+import logging
 from functools import lru_cache
-from typing import Optional, Tuple
 
 from llama_index.embeddings.bedrock import BedrockEmbedding
 
 BEDROCK_EMBED_MODEL_ID = "amazon.titan-embed-text-v2:0"
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
 def get_embedding_model() -> BedrockEmbedding:
 	# FIX 3: Centralize and reuse the embedding model instance.
 	try:
-		access_key, secret_key, session_token, region = _get_aws_config()
+		logger.info("Bedrock client initialized using bearer token authentication")
 		return BedrockEmbedding(
 			model_id=BEDROCK_EMBED_MODEL_ID,
-			region_name=region,
-			aws_access_key_id=access_key,
-			aws_secret_access_key=secret_key,
-			aws_session_token=session_token,
+			region_name="us-east-1",
 		)
 	except Exception as exc:
 		raise RuntimeError("Failed to initialize Bedrock embedding model") from exc
-
-
-def _get_aws_config() -> Tuple[str, str, Optional[str], str]:
-	access_key = os.getenv("AWS_ACCESS_KEY_ID")
-	secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-	session_token = os.getenv("AWS_SESSION_TOKEN")
-	region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-
-	if not region:
-		raise ValueError("AWS region must be set via AWS_REGION or AWS_DEFAULT_REGION")
-	if not access_key or not secret_key:
-		raise ValueError("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set")
-
-	return access_key, secret_key, session_token, region
