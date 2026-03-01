@@ -75,7 +75,7 @@ def _compute_chunk_size(documents: Sequence[Document]) -> int:
 	if not token_counts:
 		return 512
 	median_tokens = median(token_counts)
-	chunk_size = max(256, min(1536, round(median_tokens / 2)))
+	chunk_size = max(256, min(1024, round(median_tokens / 2)))
 	max_tokens = max(token_counts)
 	min_chunk_for_max_nodes = max(1, math.ceil(max_tokens / MAX_NODES_PER_DOC))
 	return max(chunk_size, min_chunk_for_max_nodes)

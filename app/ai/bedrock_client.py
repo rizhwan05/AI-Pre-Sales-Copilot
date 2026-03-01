@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 from typing import Optional
 
 import boto3
@@ -35,68 +34,52 @@ class BedrockClient:
 			raise ValueError("user_prompt must be a non-empty string")
 		system_prompt = system_prompt or ""
 
-		request_kwargs = {
-			"modelId": self._model_id,
-			"messages": [
-				{
-					"role": "user",
-					"content": [{"text": user_prompt}],
-				}
-			],
-			"inferenceConfig": {
-				"temperature": float(temperature),
-				"maxTokens": int(max_tokens),
-			},
-		}
-		if system_prompt.strip():
-			request_kwargs["system"] = [{"text": system_prompt}]
+		try:
+			request_kwargs = {
+				"modelId": self._model_id,
+				"messages": [
+					{
+						"role": "user",
+						"content": [{"text": user_prompt}],
+					}
+				],
+				"inferenceConfig": {
+					"temperature": float(temperature),
+					"maxTokens": int(max_tokens),
+				},
+			}
+			if system_prompt.strip():
+				request_kwargs["system"] = [{"text": system_prompt}]
 
-		backoffs = [0.5, 1.0, 2.0]
-		attempt = 0
-		while True:
-			try:
-				response = self._client.converse(**request_kwargs)
-				text = _extract_converse_text(response)
-				if not text:
-					raise RuntimeError("Empty response from Bedrock model")
-				return text
-			except (
-				self._client.exceptions.ThrottlingException,
-				self._client.exceptions.ProvisionedThroughputExceededException,
-				self._client.exceptions.ServiceUnavailableException,
-			) as exc:
-				if attempt >= len(backoffs):
-					logger.exception("Bedrock request failed after retries")
-					raise RuntimeError("Bedrock request failed") from exc
-				retry_delay = backoffs[attempt]
-				attempt += 1
-				logger.info(
-					"Bedrock retrying after error: attempt=%s delay_seconds=%s",
-					attempt,
-					retry_delay,
-				)
-				time.sleep(retry_delay)
-			except self._client.exceptions.ValidationException as exc:
-				logger.exception("Bedrock request validation failed")
-				raise RuntimeError("Bedrock request validation failed") from exc
-			except self._client.exceptions.AccessDeniedException as exc:
-				logger.exception("Bedrock access denied")
-				raise RuntimeError("Bedrock access denied") from exc
-			except self._client.exceptions.ResourceNotFoundException as exc:
-				logger.exception("Bedrock model not found")
-				raise RuntimeError("Bedrock model not found") from exc
-			except self._client.exceptions.ServiceQuotaExceededException as exc:
-				logger.exception("Bedrock service quota exceeded")
-				raise RuntimeError("Bedrock service quota exceeded") from exc
-			except self._client.exceptions.InternalServerException as exc:
-				logger.exception("Bedrock internal server error")
-				raise RuntimeError("Bedrock internal server error") from exc
-			except (BotoCoreError, ClientError) as exc:
-				logger.exception("Bedrock request failed")
-				raise RuntimeError("Bedrock request failed") from exc
-			except (ValueError, KeyError, TypeError, AttributeError) as exc:
-				logger.exception("Unexpected Bedrock response format")
-				raise RuntimeError("Unexpected Bedrock response format") from exc
+			response = self._client.converse(**request_kwargs)
+			text = _extract_converse_text(response)
+			if not text:
+				raise RuntimeError("Empty response from Bedrock model")
+			return text
+		except self._client.exceptions.ValidationException as exc:
+			logger.exception("Bedrock request validation failed")
+			raise RuntimeError("Bedrock request validation failed") from exc
+		except self._client.exceptions.ThrottlingException as exc:
+			logger.exception("Bedrock request throttled")
+			raise RuntimeError("Bedrock request throttled") from exc
+		except self._client.exceptions.AccessDeniedException as exc:
+			logger.exception("Bedrock access denied")
+			raise RuntimeError("Bedrock access denied") from exc
+		except self._client.exceptions.ResourceNotFoundException as exc:
+			logger.exception("Bedrock model not found")
+			raise RuntimeError("Bedrock model not found") from exc
+		except self._client.exceptions.ServiceQuotaExceededException as exc:
+			logger.exception("Bedrock service quota exceeded")
+			raise RuntimeError("Bedrock service quota exceeded") from exc
+		except self._client.exceptions.InternalServerException as exc:
+			logger.exception("Bedrock internal server error")
+			raise RuntimeError("Bedrock internal server error") from exc
+		except (BotoCoreError, ClientError) as exc:
+			logger.exception("Bedrock request failed")
+			raise RuntimeError("Bedrock request failed") from exc
+		except (ValueError, KeyError, TypeError, AttributeError) as exc:
+			logger.exception("Unexpected Bedrock response format")
+			raise RuntimeError("Unexpected Bedrock response format") from exc
 
 
 def _ensure_bedrock_bearer_token() -> None:

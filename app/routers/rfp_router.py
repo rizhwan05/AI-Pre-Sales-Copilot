@@ -11,7 +11,6 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from app.ai.bedrock_client import BedrockClient
 from app.services.extraction_service import extract_requirements
 from app.services.estimation_service import generate_estimation
-from app.services.sow_service import generate_statement_of_work
 from app.services.proposal_service import generate_proposal
 from app.services.retrieval_service import retrieve_similar_projects
 from app.utils.file_handler import extract_text_from_upload
@@ -79,15 +78,6 @@ async def follow_up(payload: dict):
 		if generation_intent == "estimation":
 			result = generate_estimation(requirements, document_type=document_type)
 			return {"output": result}
-		if generation_intent == "statement_of_work":
-			logger.info(
-				"SOW_TRIGGER: session_id=%s generation_mode=%s timestamp=%s",
-				session_id,
-				"statement_of_work",
-				time.time(),
-			)
-			result = generate_statement_of_work(requirements)
-			return {"output": result}
 
 		result = _generic_llm_response(requirements, user_query, document_type)
 		return {"output": result}
@@ -149,11 +139,6 @@ def _detect_generation_intent(intent: str) -> str:
 		return "proposal"
 	if "estimation" in intent or "estimations" in intent or "estimate" in intent:
 		return "estimation"
-	if (
-		"statement of work" in intent
-		or "sow" in intent
-	):
-		return "statement_of_work"
 	return "generic"
 
 
