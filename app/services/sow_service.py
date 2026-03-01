@@ -64,6 +64,7 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 			continue
 
 		merged = _merge_with_template(parsed, template)
+		merged = _fill_missing_sections(client, system_prompt, merged, structured_requirements, context)
 		valid, error = _validate_sow_output(merged)
 		if valid:
 			return merged
@@ -235,6 +236,8 @@ def _validate_sow_output(payload: Dict[str, object]) -> Tuple[bool, str | None]:
 			return False, "Each section.title must be a string"
 		if not isinstance(section.get("content"), str):
 			return False, "Each section.content must be a string"
+		if not section.get("content", "").strip():
+			return False, "Each section.content must be non-empty"
 	return True, None
 
 
@@ -258,6 +261,43 @@ def _generate_with_retry(
 	if last_error:
 		logger.error("SOW LLM call failed after retries: %s", last_error)
 	return ""
+
+
+def _fill_missing_sections(
+	client: BedrockClient,
+	system_prompt: str,
+	merged: Dict[str, object],
+	structured_requirements: Dict[str, object],
+	context: str,
+) -> Dict[str, object]:
+	sections = merged.get("document", {}).get("sections", [])
+	if not isinstance(sections, list):
+		return merged
+
+	missing = [item for item in sections if not str(item.get("content", "")).strip()]
+	if not missing:
+		return merged
+
+	for item in missing:
+		title = item.get("title")
+		if not isinstance(title, str) or not title.strip():
+			continue
+		prompt = (
+			"Fill ONLY the content for the section below. "
+			"Return ONLY valid JSON with keys: title, content. "
+			"Do NOT include any other text.\n\n"
+			f"SECTION TITLE: {title}\n\n"
+			f"STRUCTURED REQUIREMENTS JSON:\n{structured_requirements}\n\n"
+			f"RETRIEVED CONTEXT:\n{context}\n"
+		)
+		response = _generate_with_retry(client, system_prompt, prompt)
+		parsed = _safe_parse_json(response)
+		if isinstance(parsed, dict):
+			content = parsed.get("content")
+			if isinstance(content, str) and content.strip():
+				item["content"] = content.strip()
+
+	return merged
 
 
 def _fallback_sow(template: Dict[str, object]) -> Dict[str, object]:

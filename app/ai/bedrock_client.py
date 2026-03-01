@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 logger = logging.getLogger(__name__)
@@ -17,9 +18,11 @@ class BedrockClient:
 		self._model_id = model_id
 		self._region = region or "us-east-1"
 		_ensure_bedrock_bearer_token()
+		config = Config(connect_timeout=30, read_timeout=180, retries={"max_attempts": 3, "mode": "standard"})
 		self._client = boto3.client(
 			service_name="bedrock-runtime",
 			region_name=self._region,
+			config=config,
 		)
 		logger.info("Bedrock client initialized using bearer token authentication")
 

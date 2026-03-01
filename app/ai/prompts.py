@@ -210,6 +210,7 @@ QUALITY STANDARDS:
 Use professional, client-facing language.
 Provide full paragraph content for each section.
 Maintain consistency and traceability to requirements.
+Do NOT leave any section content empty.
 
 OUTPUT CONTRACT:
 You MUST return ONLY valid JSON.
