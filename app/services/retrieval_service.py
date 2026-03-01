@@ -74,6 +74,10 @@ def retrieve_similar_projects(
 			len(results),
 			_sorted_document_types(results),
 		)
+		logger.info(
+			"Retrieval metadata sample: %s",
+			_format_metadata_sample(results),
+		)
 		if not results and document_type:
 			logger.warning("No results for document_type=%s; retrying without filter", document_type)
 			logger.info("Fallback to semantic-only retrieval")
@@ -84,6 +88,10 @@ def retrieve_similar_projects(
 				"fallback",
 				len(results),
 				_sorted_document_types(results),
+			)
+			logger.info(
+				"Fallback metadata sample: %s",
+				_format_metadata_sample(results),
 			)
 		if not results:
 			return []
@@ -179,6 +187,21 @@ def _sorted_document_types(results) -> List[str]:
 		if doc_type:
 			types.add(str(doc_type))
 	return sorted(types)
+
+
+def _format_metadata_sample(results, limit: int = 3) -> List[Dict[str, object]]:
+	sample: List[Dict[str, object]] = []
+	for item in results[:limit]:
+		node = getattr(item, "node", None)
+		metadata = getattr(node, "metadata", {}) if node else {}
+		sample.append(
+			{
+				"document_type": metadata.get("document_type"),
+				"project_name": metadata.get("project_name"),
+				"tech_stack": metadata.get("tech_stack"),
+			}
+		)
+	return sample
 
 
 def _empty_response() -> Dict[str, object]:
