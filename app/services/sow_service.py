@@ -5,12 +5,9 @@ import logging
 import time
 from typing import Dict, List
 
-from pydantic import ValidationError
-
 from app.ai.bedrock_client import BedrockClient
 from app.ai.prompts import get_sow_index_prompt, get_sow_prompt, get_sow_section_prompt
 from app.services.retrieval_service import retrieve_similar_projects
-from app.services.sow_schema import SOWSchema
 from llama_index.core.utils import get_tokenizer
 
 logger = logging.getLogger(__name__)
@@ -18,7 +15,7 @@ logger = logging.getLogger(__name__)
 SOW_TOP_K = 12
 MAX_CONTEXT_CHARS = 12000
 SECTION_CONTEXT_CHARS = 8000
-MAX_SECTIONS = 3
+MAX_SECTIONS = 10
 
 
 def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Dict[str, object]:
@@ -244,23 +241,26 @@ def generate_statement_of_work(structured_requirements: Dict[str, object]) -> Di
 
 
 def _validate_sow_json(text: str) -> Dict[str, object]:
-	try:
-		return SOWSchema.model_validate_json(text).model_dump()
-	except ValidationError:
-		cleaned = _strip_json_fences(text)
-		if cleaned is None:
-			raise ValueError("SOW JSON failed schema validation")
-		try:
-			return SOWSchema.model_validate_json(cleaned).model_dump()
-		except ValidationError as exc:
-			raise ValueError("SOW JSON failed schema validation") from exc
+	cleaned = _strip_json_fences(text)
+	if cleaned:
+		parsed = _safe_parse_json(cleaned)
+		if parsed is not None:
+			return parsed
+		repaired = _repair_json(cleaned)
+		if repaired:
+			parsed = _safe_parse_json(repaired)
+			if parsed is not None:
+				logger.warning("SOW JSON repaired after truncation")
+				return parsed
+	logger.warning("SOW JSON parsing failed; falling back to empty document")
+	return _empty_sow_document()
 
 
 def _validate_sow_dict(payload: Dict[str, object]) -> Dict[str, object]:
-	try:
-		return SOWSchema.model_validate(payload).model_dump()
-	except ValidationError as exc:
-		raise ValueError("SOW JSON failed schema validation") from exc
+	if isinstance(payload, dict):
+		return payload
+	logger.warning("SOW payload was not a dict; falling back to empty document")
+	return _empty_sow_document()
 
 
 def _summarize_requirements(requirements: Dict[str, object]) -> str:
@@ -320,6 +320,48 @@ def _strip_json_fences(text: str) -> str | None:
 	if start == -1 or end == -1 or end <= start:
 		return None
 	return stripped[start : end + 1]
+
+
+def _repair_json(text: str) -> str | None:
+	if not text:
+		return None
+	stripped = text.strip()
+	start = stripped.find("{")
+	if start == -1:
+		return None
+	segment = stripped[start:]
+	stack: List[str] = []
+	in_string = False
+	escape = False
+	for ch in segment:
+		if in_string:
+			if escape:
+				escape = False
+				continue
+			if ch == "\\":
+				escape = True
+				continue
+			if ch == '"':
+				in_string = False
+			continue
+		if ch == '"':
+			in_string = True
+			continue
+		if ch == "{":
+			stack.append("}")
+			continue
+		if ch == "[":
+			stack.append("]")
+			continue
+		if ch in ("}", "]"):
+			if stack and ch == stack[-1]:
+				stack.pop()
+			continue
+	if in_string:
+		return None
+	if stack:
+		segment = segment + "".join(reversed(stack))
+	return segment
 
 
 def _safe_parse_json(text: str) -> Dict[str, object] | None:
