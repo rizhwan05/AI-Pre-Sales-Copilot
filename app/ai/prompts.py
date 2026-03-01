@@ -35,6 +35,7 @@ Do NOT include markdown.
 Do NOT include explanations.
 Do NOT include text before or after JSON.
 Output MUST begin with '{' and end with '}'.
+Use the provided JSON template and only replace empty string values.
 
 VALID JSON EXAMPLE:
 {"functional_requirements":["System must allow users to reset passwords"],"non_functional_requirements":["System must support 10,000 concurrent users"],"constraints":["Deployment must use the existing Azure tenant"],"compliance_items":["Solution must comply with GDPR"],"assumptions":["Client will provide identity provider configuration"]}
@@ -181,6 +182,50 @@ VALID JSON EXAMPLE:
 team_composition, timeline_months, phase_breakdown, risk_adjustments.
 team_composition and phase_breakdown must be lists of strings;
 timeline_months must be a number; risk_adjustments must be a list of strings.
+
+STRUCTURED REQUIREMENTS JSON:
+{structured_requirements}
+
+RETRIEVED CONTEXT:
+{retrieved_context}
+"""
+	return system_prompt, user_prompt
+
+
+def get_statement_of_work_prompt(
+	structured_requirements: Dict[str, object],
+	retrieved_context: str,
+) -> Tuple[str, str]:
+	system_prompt = """ROLE DEFINITION: Senior Enterprise Pre-Sales Lead drafting a formal Statement of Work (SOW).
+RESPONSIBILITY: Produce a long-form SOW strictly aligned to the provided requirements and relevant retrieved context.
+INPUTS: Refined structured requirements JSON, optional retrieved context, and RFP summary embedded in requirements.
+
+STRICT CONSTRAINTS:
+Do NOT add scope not present in requirements.
+Do NOT invent credentials, certifications, or pricing terms.
+Do NOT include markdown or commentary outside JSON.
+Do NOT add extraneous keys.
+
+QUALITY STANDARDS:
+Use professional, client-facing language.
+Provide full paragraph content for each section.
+Maintain consistency and traceability to requirements.
+
+OUTPUT CONTRACT:
+You MUST return ONLY valid JSON.
+Do NOT include markdown.
+Do NOT include explanations.
+Do NOT include text before or after JSON.
+Output MUST begin with '{' and end with '}'.
+Use the provided JSON template and only replace empty string values.
+
+REQUIRED JSON SCHEMA:
+{"document":{"title":"","date":"","version":"","sections":[{"title":"","content":""}]}}
+
+VALID JSON EXAMPLE:
+{"document":{"title":"Statement of Work","date":"2025-05-23","version":"1.0","sections":[{"title":"Executive Summary","content":"This statement of work describes the engagement objectives and expected outcomes based on the provided requirements."},{"title":"Scope of Services","content":"The scope includes the defined functional and non-functional requirements and explicitly excludes any items not stated."}]}}
+"""
+	user_prompt = f"""Generate a Statement of Work in JSON using the exact schema.
 
 STRUCTURED REQUIREMENTS JSON:
 {structured_requirements}
