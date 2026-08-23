@@ -1,55 +1,100 @@
-# Pre-Sales Copilot (RAG)
+# Pre-Sales Copilot (RAG) - Exhaustive Documentation
 
-## Overview
-This project contains a FastAPI backend for an AI pre-sales copilot leveraging Retrieval-Augmented Generation (RAG). It uses ChromaDB for vector storage and AWS Bedrock for Large Language Model (LLM) generation.
+## System Overview
+The **Pre-Sales Copilot** is a specialized AI assistant designed to automate and augment the pre-sales workflow. It leverages **Retrieval-Augmented Generation (RAG)** using **LlamaIndex**, **ChromaDB**, and **AWS Bedrock** to analyze Request For Proposals (RFPs) and automatically generate structured Proposals, Estimations, and Statements of Work (SOW) based on historical project data.
 
-## Architecture
-The system follows a typical RAG (Retrieval-Augmented Generation) architecture tailored for the Pre-Sales domain.
-- **Web Framework**: FastAPI handles HTTP requests.
-- **Vector Database**: ChromaDB stores document embeddings (past successful proposals and statements of work) locally in `chroma_store/`.
-- **AI/LLM Provider**: AWS Bedrock is accessed via `LlamaIndex` to generate high-quality text for new proposals based on retrieved context.
-- **Session Management**: An in-memory temporary cache backed by the filesystem (`sessions/`) stores user intent and extracted requirements for a short TTL (1 hour).
+---
 
-## Application Flow
+## 1. Architecture Deep-Dive
 
-### 1. Ingestion Flow (Admin/Setup)
-1. User uploads a historical project document (like a past Proposal, SOW, or Architecture document).
-2. The `file_handler` extracts the text.
-3. `ingestion_router` chunks the text, creates embeddings via AWS Bedrock (`embedding_client`), and indexes it into ChromaDB.
+### 1.1 Core Components
+- **Framework**: FastAPI
+- **AI Orchestration**: LlamaIndex Core
+- **LLM Engine**: AWS Bedrock (typically Amazon Nova models via `BedrockClient`).
+- **Embeddings**: Configured via `embedding_client.py` to vectorize text for similarity search.
+- **Vector Database**: Local **ChromaDB** (`./chroma_store`) used to persist historical project case studies, architectures, and proposals.
 
-### 2. RFP processing Flow (User)
-1. **Upload RFP**: The user uploads a Request for Proposal (RFP) document.
-2. **Extraction**: The system extracts requirements (Functional, Non-Functional, Constraints, etc.) and returns a `session_id`.
-3. **Follow-up Generation**: Using the `session_id` and a user prompt (e.g., "Generate a proposal" or "Generate an estimation"), the orchestrator:
-   - Identifies the intent.
-   - Retrieves similar past projects from ChromaDB.
-   - Passes the extracted requirements + historical context to the LLM (AWS Bedrock).
-   - Returns the generated document.
+### 1.2 Data Persistence
+1. **Vector Store (`chroma_store/`)**: Holds LlamaIndex semantic chunks. Nodes are inserted with metadata (`project_name`, `tech_stack`, `duration`, `team_size`, `document_type`).
+2. **Session Store (`sessions/`)**: When an RFP is uploaded, the parsed requirements are cached in a local JSON file keyed by a UUID `session_id` with a TTL (default 3600 seconds).
 
-## Endpoints
+---
 
-### Ingestion API
-- `POST /api/v1/ingest/add`
-  - **Payload**: `multipart/form-data` containing `document_type` and `file`.
-  - **Description**: Extracts text from the uploaded file and ingests it into the Chroma vector store for RAG.
+## 2. API Contract & Workflow
 
-### RFP API
-- `POST /api/v1/rfp/upload`
-  - **Payload**: `multipart/form-data` containing `file`.
-  - **Description**: Parses the RFP, extracts structured requirements, saves them to a session, and returns `session_id` and `requirements_summary`.
-- `POST /api/v1/rfp/follow-up`
-  - **Payload**: JSON `{"session_id": "uuid", "user_query": "string"}`.
-  - **Description**: Generates an output (proposal, estimation, SOW, or generic response) using the session requirements and retrieved historical context.
+### 2.1 Ingestion Flow
+**`POST /ingest/add`**
+Used to populate the RAG database with historical documents.
+- **Payload (`multipart/form-data`)**:
+  - `document_type` (Form string): Must be one of `proposal`, `case_study`, `estimation`, `architecture`.
+  - `file` (UploadFile): The document (.txt or .pdf).
+- **Behavior**: Extracts text, chunks it semantically, assigns a deterministic SHA256 ID, and persists to ChromaDB.
+- **Response**: Returns the number of `indexed_chunks` successfully added.
 
-## Usage Steps
-1. Ensure your AWS credentials are configured in your environment to allow access to AWS Bedrock.
-2. Install dependencies using `uv` (or pip): `uv sync`.
-3. Start the FastAPI server:
+### 2.2 RFP Upload Flow
+**`POST /rfp/upload`**
+The entry point for a new pre-sales engagement.
+- **Payload (`multipart/form-data`)**:
+  - `file` (UploadFile): The raw RFP document.
+- **Behavior**: Extracts text and uses the LLM (`extraction_service`) to parse structured requirements (Functional, Non-Functional, Constraints, Compliance, Assumptions). Creates a session.
+- **Response**: Returns the `session_id` and the `requirements_summary`.
+
+### 2.3 Follow-Up & Generation Flow
+**`POST /rfp/follow-up`**
+Used to chat with the copilot or generate specific pre-sales artifacts based on the uploaded RFP.
+- **Payload (JSON)**:
+  ```json
+  {
+    "session_id": "<uuid-from-upload>",
+    "user_query": "Generate a detailed technical proposal for this RFP"
+  }
+  ```
+- **Behavior**:
+  1. Validates the `session_id` and loads the cached requirements.
+  2. Detects intent from the `user_query` (e.g., proposal, estimation, SOW, generic).
+  3. **If Generic Intent**: Uses RAG. Calls `retrieve_similar_projects` to query ChromaDB, injecting the retrieved historical context alongside the RFP requirements into the LLM prompt.
+  4. **If Specific Intent**: Routes to `generate_proposal`, `generate_estimation`, or `generate_statement_of_work` services to create structured markdown documents.
+- **Response**:
+  ```json
+  {
+    "output": "<markdown response or generated artifact>"
+  }
+  ```
+
+---
+
+## 3. Pre-Sales Services
+- **Extraction Service**: Translates raw RFP text into categorized dictionaries.
+- **Proposal Service**: Generates structured business proposals aligning the RFP needs with the company's capabilities.
+- **Estimation Service**: Generates effort, timeline, and cost estimations.
+- **SOW Service**: Generates formal Statements of Work.
+- **Retrieval Service**: Interfaces with the LlamaIndex `VectorStoreIndex` to find the most relevant past projects based on semantic similarity.
+
+---
+
+## 4. Setup and Execution Steps
+
+### 4.1 Prerequisites
+- AWS Bedrock access configured locally.
+- Python 3.11+ and `uv`.
+
+### 4.2 Configuration
+Set up your environment variables (or `.env` file) for AWS Bedrock access:
+```env
+AWS_REGION=us-east-1
+NOVA_MODEL_ID=amazon.nova-pro-v1:0
+```
+
+### 4.3 Start the Server
+1. Install dependencies:
    ```bash
-   python app/main.py
-   # Or using uvicorn directly
-   uvicorn app.main:app --host 127.0.0.1 --port 8080 --reload
+   uv sync
    ```
-4. Access the API documentation at `http://127.0.0.1:8080/docs`.
-5. Use the `/ingest/add` endpoint to populate your ChromaDB with past projects.
-6. Use the `/rfp/upload` endpoint with a sample RFP, then use the `/rfp/follow-up` endpoint to generate documents.
+2. *(Optional)* Seed the database with historical data using the CLI script:
+   ```bash
+   python -m app.ingestion.ingest_projects
+   ```
+3. Run the FastAPI server:
+   ```bash
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
