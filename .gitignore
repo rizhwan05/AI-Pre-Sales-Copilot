@@ -1,31 +1,26 @@
-# Python
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Byte-compiled / optimized
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg-info/
-*.egg
+*$py.class
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-
-# IDE
+# IDEs
 .vscode/
 .idea/
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Logs
+# Logs and DB
 *.log
-
-# Data and local stores
+*.sqlite
+*.db
 chroma_store/
-data/
 
-# Environment files
-.env
+# Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
